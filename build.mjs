@@ -11,9 +11,15 @@
  *   node build.mjs https://example.com/partyverse-signature/
  *
  * To make one for someone else, change PERSON below.
+ *
+ * The name is drawn as an image in Owambe Sans Extended Black, the design's
+ * face, since most mail apps can't load a font. That needs the font file at
+ * fonts/OwambeSansExt-Black.otf (kept out of git: it is PartyVerse's, and
+ * this repo is public) and Google Chrome, which draws it.
  */
 import sharp from 'sharp';
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { chromium } from 'playwright-core';
+import { mkdirSync, writeFileSync, readFileSync } from 'node:fs';
 
 const PERSON = {
   name: 'Mobola Awe',
@@ -68,6 +74,37 @@ for (const [k] of SOCIAL) {
   await sharp(Buffer.from(svg)).png().toFile(`images/icon-${k}.png`);
 }
 
+/* ---- the name, in the design's face: drawn by Chrome at 2x. 38.2px is the
+   size at which "Mobola Awe" is as wide as in the design (271px). The image
+   is cut to the name's own width, and from the top of the tall letters to
+   the bottom of the low ones (measured on "Mbdgjpqy"), so every name sits
+   the same way whatever its letters. */
+const NAME_PX = 38.2;
+const slug = PERSON.name.toLowerCase().normalize('NFD').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+const nameImg = await (async () => {
+  const browser = await chromium.launch({ executablePath: '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', headless: true });
+  const page = await browser.newPage({ deviceScaleFactor: 2 });
+  const face = readFileSync('fonts/OwambeSansExt-Black.otf').toString('base64');
+  const esc = (t) => t.replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c]);
+  const draw = async (text) => {
+    await page.setContent(`<style>@font-face{font-family:N;src:url(data:font/otf;base64,${face})}body{margin:0}span{display:inline-block;font:${NAME_PX}px/1.6 N;color:${INK};padding:0 10px;white-space:nowrap}</style><span>${esc(text)}</span>`);
+    await page.evaluate(() => document.fonts.ready);
+    return page.locator('span').screenshot({ omitBackground: true });
+  };
+  const ink = async (png) => {
+    const { info } = await sharp(png).trim().toBuffer({ resolveWithObject: true });
+    return { left: -info.trimOffsetLeft, top: -info.trimOffsetTop, width: info.width, height: info.height };
+  };
+  const ref = await ink(await draw('Mbdgjpqy'));
+  const png = await draw(PERSON.name);
+  const own = await ink(png);
+  await browser.close();
+  // even sizes, so the 1x box is whole pixels
+  const width = own.width + (own.width % 2), height = ref.height + (ref.height % 2);
+  await sharp(png).extract({ left: own.left, top: ref.top, width, height }).png().toFile(`images/name-${slug}.png`);
+  return { file: `name-${slug}`, width: width / 2, height: height / 2 };
+})();
+
 /* ---- the HTML: tables and inline styles only, which is what email keeps */
 const img = (base, f, w, h, alt = '') =>
   `<img src="${base}${f}.png" width="${w}" height="${h}" alt="${alt}" style="display:block;border:0;outline:none;width:${w}px;height:${h}px;">`;
@@ -94,10 +131,10 @@ function html(base) {
     return `<td width="${pct(c.width)}" style="width:${pct(c.width)};padding:0;line-height:0;font-size:0;">${href ? `<a href="${href}" target="_blank" style="display:block;">${pic}</a>` : pic}</td>`;
   }).join('');
   const T = 'cellpadding="0" cellspacing="0" border="0" role="presentation"';
-  /* On a phone, a smaller name and title so they keep to one line. Apps that
-     drop <style> (some do in a signature) keep the inline sizes: the name
-     may then wrap, which still reads fine. */
-  const narrow = `<style>@media only screen and (max-width:420px){.pv-text{padding-left:18px!important}.pv-name{font-size:27px!important;line-height:31px!important}.pv-title{font-size:15px!important;line-height:19px!important;padding-bottom:36px!important}}</style>`;
+  /* On a phone, a smaller title so it keeps to one line (the name, an
+     image, shrinks to fit by itself). Apps that drop <style> keep the
+     inline size, and the title may wrap, which still reads fine. */
+  const narrow = `<style>@media only screen and (max-width:420px){.pv-text{padding-left:18px!important}.pv-title{font-size:15px!important;line-height:19px!important;padding-bottom:36px!important}}</style>`;
   return `${narrow}
 <!--[if mso]><table ${T} width="600"><tr><td><![endif]-->
 <table ${T} width="100%" style="width:100%;max-width:600px;border-collapse:collapse;background:#ffffff;">
@@ -106,8 +143,8 @@ function html(base) {
   <tr>
     <td valign="top" height="234" class="pv-text" style="height:234px;padding:26px 10px 0 26px;">
       <table ${T} style="border-collapse:collapse;">
-      <tr><td class="pv-name" style="font-family:'Archivo Black','Arial Black',Arial,sans-serif;font-size:36px;line-height:40px;font-weight:900;letter-spacing:-0.5px;color:${INK};">${PERSON.name}</td></tr>
-      <tr><td class="pv-title" style="padding:4px 0 52px 0;font-family:${font};font-size:20px;line-height:24px;color:${GREY};">${PERSON.title}</td></tr>
+      <tr><td style="padding:8px 0 0 3px;line-height:0;font-size:0;"><img src="${base}${nameImg.file}.png" width="${nameImg.width}" height="${nameImg.height}" alt="${PERSON.name}" style="display:block;border:0;outline:none;width:${nameImg.width}px;max-width:100%;height:auto;font-family:'Arial Black',Arial,sans-serif;font-size:30px;line-height:34px;font-weight:900;color:${INK};"></td></tr>
+      <tr><td class="pv-title" style="padding:5px 0 47px 0;font-family:${font};font-size:20px;line-height:24px;color:${GREY};">${PERSON.title}</td></tr>
       ${line('T', PERSON.phone, 'tel:' + PERSON.tel)}
       ${line('E', PERSON.email, 'mailto:' + PERSON.email)}
       ${line('W', SITE.label, SITE.href)}
