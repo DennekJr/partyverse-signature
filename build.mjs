@@ -75,37 +75,55 @@ const font = 'Helvetica,Arial,sans-serif';
 const line = (label, text, href) =>
   `<tr><td style="padding:0 0 13px 0;font-family:${font};font-size:15px;line-height:19px;color:${INK};">${label}: <a href="${href}" style="color:${INK};text-decoration:none;">${text}</a></td></tr>`;
 
+/* Fluid: the signature fills the width it's given, up to 600px. The banner
+   slices scale by the same ratio (each mid-row cell takes its slice's share
+   of 600 as a percentage), on the banner's black so a rounding sliver can't
+   show white. Desktop Outlook ignores max-width, so it gets a fixed 600px
+   table from the conditional comments; the width/height attributes are for
+   it too, the inline styles for everyone else. */
+const fluid = (base, f, w, h, alt = '') =>
+  `<img src="${base}${f}.png" width="${w}" height="${h}" alt="${alt}" style="display:block;border:0;outline:none;width:100%;max-width:${w}px;height:auto;">`;
+const pct = (w) => +(w / 6).toFixed(4) + '%';
+
 function html(base) {
   const icons = SOCIAL.map(([k, label, href], i) =>
     `<tr><td style="padding:${i ? 32 : 0}px 0 0 0;"><a href="${href}" target="_blank">${img(base, 'icon-' + k, 32, 32, label)}</a></td></tr>`).join('');
   const midCells = mid.map((c) => {
-    const pic = img(base, c.name, c.width, c.height, c.name === 'badge-google' ? 'Get it on Google Play' : c.name === 'badge-apple' ? 'Download on the App Store' : '');
+    const pic = fluid(base, c.name, c.width, c.height, c.name === 'badge-google' ? 'Get it on Google Play' : c.name === 'badge-apple' ? 'Download on the App Store' : '');
     const href = c.name === 'badge-google' ? STORES.google : c.name === 'badge-apple' ? STORES.apple : '';
-    return `<td width="${c.width}" style="padding:0;line-height:0;font-size:0;">${href ? `<a href="${href}" target="_blank">${pic}</a>` : pic}</td>`;
+    return `<td width="${pct(c.width)}" style="width:${pct(c.width)};padding:0;line-height:0;font-size:0;">${href ? `<a href="${href}" target="_blank" style="display:block;">${pic}</a>` : pic}</td>`;
   }).join('');
-  return `<table cellpadding="0" cellspacing="0" border="0" width="600" style="width:600px;border-collapse:collapse;background:#ffffff;">
+  const T = 'cellpadding="0" cellspacing="0" border="0" role="presentation"';
+  /* On a phone, a smaller name and title so they keep to one line. Apps that
+     drop <style> (some do in a signature) keep the inline sizes: the name
+     may then wrap, which still reads fine. */
+  const narrow = `<style>@media only screen and (max-width:420px){.pv-text{padding-left:18px!important}.pv-name{font-size:27px!important;line-height:31px!important}.pv-title{font-size:15px!important;line-height:19px!important;padding-bottom:36px!important}}</style>`;
+  return `${narrow}
+<!--[if mso]><table ${T} width="600"><tr><td><![endif]-->
+<table ${T} width="100%" style="width:100%;max-width:600px;border-collapse:collapse;background:#ffffff;">
 <tr><td style="padding:0;">
-  <table cellpadding="0" cellspacing="0" border="0" width="600" style="width:600px;border-collapse:collapse;">
+  <table ${T} width="100%" style="width:100%;border-collapse:collapse;">
   <tr>
-    <td valign="top" height="234" style="height:234px;padding:26px 0 0 26px;">
-      <table cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;">
-      <tr><td style="font-family:'Archivo Black','Arial Black',Arial,sans-serif;font-size:36px;line-height:40px;font-weight:900;letter-spacing:-0.5px;color:${INK};">${PERSON.name}</td></tr>
-      <tr><td style="padding:4px 0 52px 0;font-family:${font};font-size:20px;line-height:24px;color:${GREY};">${PERSON.title}</td></tr>
+    <td valign="top" height="234" class="pv-text" style="height:234px;padding:26px 10px 0 26px;">
+      <table ${T} style="border-collapse:collapse;">
+      <tr><td class="pv-name" style="font-family:'Archivo Black','Arial Black',Arial,sans-serif;font-size:36px;line-height:40px;font-weight:900;letter-spacing:-0.5px;color:${INK};">${PERSON.name}</td></tr>
+      <tr><td class="pv-title" style="padding:4px 0 52px 0;font-family:${font};font-size:20px;line-height:24px;color:${GREY};">${PERSON.title}</td></tr>
       ${line('T', PERSON.phone, 'tel:' + PERSON.tel)}
       ${line('E', PERSON.email, 'mailto:' + PERSON.email)}
       ${line('W', SITE.label, SITE.href)}
       </table>
     </td>
     <td valign="top" width="72" style="width:72px;padding:64px 0 0 0;">
-      <table cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;">${icons}</table>
+      <table ${T} style="border-collapse:collapse;">${icons}</table>
     </td>
   </tr>
   </table>
 </td></tr>
-<tr><td style="padding:0;line-height:0;font-size:0;"><a href="${SITE.href}" target="_blank">${img(base, rowTop.name, 600, rowTop.height, 'What are you celebrating next?! PartyVerse')}</a></td></tr>
-<tr><td style="padding:0;line-height:0;font-size:0;"><table cellpadding="0" cellspacing="0" border="0" width="600" style="width:600px;border-collapse:collapse;"><tr>${midCells}</tr></table></td></tr>
-<tr><td style="padding:0;line-height:0;font-size:0;">${img(base, rowBottom.name, 600, rowBottom.height)}</td></tr>
-</table>`;
+<tr><td style="padding:0;line-height:0;font-size:0;background:${INK};"><a href="${SITE.href}" target="_blank" style="display:block;">${fluid(base, rowTop.name, 600, rowTop.height, 'What are you celebrating next?! PartyVerse')}</a></td></tr>
+<tr><td style="padding:0;line-height:0;font-size:0;background:${INK};"><table ${T} width="100%" style="width:100%;border-collapse:collapse;table-layout:fixed;"><tr>${midCells}</tr></table></td></tr>
+<tr><td style="padding:0;line-height:0;font-size:0;background:${INK};">${fluid(base, rowBottom.name, 600, rowBottom.height)}</td></tr>
+</table>
+<!--[if mso]></td></tr></table><![endif]-->`;
 }
 
 writeFileSync('signature.html', html(BASE) + '\n');
